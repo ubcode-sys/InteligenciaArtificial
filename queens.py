@@ -37,10 +37,7 @@ class NReinasApp:
         tk.Button(self.menu_frame, text="A* (A Estrella)", command=self.ejecutar_astar, **btn_estilo).pack(pady=5)
 
     def dibujar_tablero(self, estado):
-        """
-        Dibuja el tablero. 'estado' es una tupla donde el índice es la columna y el valor es la fila.
-        Ejemplo: (2, 0, 3, 1) significa reinas en (2,0), (0,1), (3,2), (1,3).
-        """
+     
         self.canvas.delete("all")
         for r in range(self.N):
             for c in range(self.N):
@@ -57,7 +54,6 @@ class NReinasApp:
         self.root.update()
 
     def es_seguro(self, estado, nueva_fila):
-        """Verifica si colocar una reina en 'nueva_fila' en la siguiente columna es seguro."""
         col_actual = len(estado)
         for c, r in enumerate(estado):
             if r == nueva_fila or abs(r - nueva_fila) == abs(c - col_actual):
@@ -65,7 +61,6 @@ class NReinasApp:
         return True
 
     def generar_hijos(self, estado):
-        """Genera los estados válidos agregando una reina en la siguiente columna."""
         hijos = []
         if len(estado) < self.N:
             for r in range(self.N):
@@ -74,10 +69,6 @@ class NReinasApp:
         return hijos
 
     def heuristica(self, estado):
-        """
-        Para Voraz y A*. Retorna un valor estimado para ordenar los nodos.
-        En este caso, estimamos el costo basado en cuántas reinas faltan por colocar.
-        """
         return self.N - len(estado)
 
 
