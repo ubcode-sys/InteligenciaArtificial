@@ -3,6 +3,7 @@ import math
 import random
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import matplotlib
 
@@ -223,6 +224,90 @@ def generate_posterior_plot(posteriors, output_path):
     plt.close(fig)
 
 
+def generate_fp_fn_plot(y_true, y_pred, labels, output_path):
+    fp_values = []
+    fn_values = []
+
+    for cls in labels:
+        fp = sum(1 for real, pred in zip(y_true, y_pred) if pred == cls and real != cls)
+        fn = sum(1 for real, pred in zip(y_true, y_pred) if real == cls and pred != cls)
+        fp_values.append(fp)
+        fn_values.append(fn)
+
+    x = np.arange(len(labels))
+    width = 0.36
+
+    fig, ax = plt.subplots(figsize=(9, 6))
+    bars_fp = ax.bar(x - width / 2, fp_values, width, label='Falsos positivos', color='#E45756')
+    bars_fn = ax.bar(x + width / 2, fn_values, width, label='Falsos negativos', color='#4C78A8')
+
+    max_count = max(max(fp_values), max(fn_values))
+    y_top = max(1, max_count + 1)
+    ax.set_ylim(0, y_top)
+
+    ax.set_title('Falsos positivos y falsos negativos por clase')
+    ax.set_xlabel('Clase')
+    ax.set_ylabel('Cantidad')
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=20, ha='right')
+    ax.grid(axis='y', alpha=0.2)
+    ax.legend(frameon=False)
+
+    for bar in list(bars_fp) + list(bars_fn):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width() / 2, height + (0.03 * y_top), f'{int(height)}', ha='center')
+
+    if max_count == 0:
+        ax.text(
+            0.5,
+            0.9,
+            'Sin errores en pruebas: FP = 0 y FN = 0',
+            transform=ax.transAxes,
+            ha='center',
+            va='center',
+            fontsize=11,
+            bbox=dict(facecolor='white', alpha=0.85, edgecolor='#cccccc'),
+        )
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=160, bbox_inches='tight')
+    plt.close(fig)
+
+
+def generate_test_bell_histogram_with_mean(X_test_df, output_path):
+    values = X_test_df.to_numpy(dtype=float).ravel()
+
+    mean = values.mean()
+    std = values.std(ddof=1)
+
+    fig, ax = plt.subplots(figsize=(9, 6))
+    ax.hist(
+        values,
+        bins=15,
+        density=True,
+        color='#4C78A8',
+        alpha=0.60,
+        edgecolor='white',
+        label='Histograma (general pruebas)',
+    )
+
+    x = np.linspace(values.min() - 0.5, values.max() + 0.5, 400)
+    y = (1 / (std * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x - mean) / std) ** 2)
+    ax.plot(x, y, color='#F58518', linewidth=2.2, label='Curva de campana (normal)')
+
+    ax.axvline(mean, color='#E45756', linewidth=2.4, linestyle='--', label=f'Promedio: {mean:.3f}')
+
+    ax.set_title('Histograma de campana general (conjunto de pruebas)')
+    ax.set_xlabel('Valor de caracteristicas (test)')
+    ax.set_ylabel('Densidad')
+    ax.grid(alpha=0.2)
+    ax.legend(frameon=False)
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=160, bbox_inches='tight')
+    plt.close(fig)
+
+
 df = load_iris_dataframe()
 features = ['sepal_length', 'sepal_width', 'petal_length', 'petal_width']
 target = 'species'
@@ -253,9 +338,13 @@ output_dir = Path(__file__).resolve().parent
 scatter_path = output_dir / 'iris_separacion.png'
 confusion_path = output_dir / 'iris_matriz_confusion.png'
 posterior_path = output_dir / 'iris_probabilidades.png'
+test_histogram_path = output_dir / 'iris_campana_promedio_pruebas.png'
+fp_fn_path = output_dir / 'iris_falsos_positivos_negativos.png'
 
 generate_feature_scatter(df, target, scatter_path)
+generate_test_bell_histogram_with_mean(X_test, test_histogram_path)
 print(f'\nSe genero la visualizacion: {scatter_path.name}')
+print(f'Se genero la visualizacion: {test_histogram_path.name}')
 
 model = GaussianNaiveBayes()
 model.fit(X_train, y_train)
@@ -289,5 +378,7 @@ print(f'  Error        : {error_rate:.4f} ({error_rate * 100:.2f}%)')
 
 generate_confusion_matrix_plot(y_test.tolist(), preds, model.classes, confusion_path)
 generate_posterior_plot(posteriors, posterior_path)
+generate_fp_fn_plot(y_test.tolist(), preds, model.classes, fp_fn_path)
 print(f'Se genero la visualizacion: {confusion_path.name}')
 print(f'Se genero la visualizacion: {posterior_path.name}')
+print(f'Se genero la visualizacion: {fp_fn_path.name}')
