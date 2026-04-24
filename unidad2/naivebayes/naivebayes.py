@@ -105,6 +105,17 @@ class GaussianNaiveBayes:
             preds.append(pred)
         return preds
 
+    def predict_with_posteriors(self, X_df):
+        """Retorna predicciones y lista de posteridades para cada muestra"""
+        preds = []
+        posteriors_list = []
+        for _, row in X_df.iterrows():
+            sample = {f: row[f] for f in X_df.columns}
+            pred, posteriors = self.predict_with_details(sample, verbose=False)
+            preds.append(pred)
+            posteriors_list.append(posteriors)
+        return preds, posteriors_list
+
 
 def stratified_split(df, target_col, train_ratio=0.8, seed=42):
     rng = random.Random(seed)
@@ -224,50 +235,72 @@ def generate_posterior_plot(posteriors, output_path):
     plt.close(fig)
 
 
-def generate_fp_fn_plot(y_true, y_pred, labels, output_path):
-    fp_values = []
-    fn_values = []
+def generate_performance_metrics_plot(y_true, y_pred, labels, output_path):
+    """Genera gráfica de métricas de rendimiento (Precisión, Recall, F1-Score) por clase"""
+    metrics = {label: {'precision': 0, 'recall': 0, 'f1': 0} for label in labels}
 
     for cls in labels:
+        # Verdaderos Positivos (TP): predicción correcta
+        tp = sum(1 for real, pred in zip(y_true, y_pred) if pred == cls and real == cls)
+        # Falsos Positivos (FP): predijo la clase pero no es
         fp = sum(1 for real, pred in zip(y_true, y_pred) if pred == cls and real != cls)
+        # Falsos Negativos (FN): no predijo pero era la clase
         fn = sum(1 for real, pred in zip(y_true, y_pred) if real == cls and pred != cls)
-        fp_values.append(fp)
-        fn_values.append(fn)
+
+        # Calcular métricas
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+        metrics[cls]['precision'] = precision
+        metrics[cls]['recall'] = recall
+        metrics[cls]['f1'] = f1
 
     x = np.arange(len(labels))
-    width = 0.36
+    width = 0.25
 
-    fig, ax = plt.subplots(figsize=(9, 6))
-    bars_fp = ax.bar(x - width / 2, fp_values, width, label='Falsos positivos', color='#E45756')
-    bars_fn = ax.bar(x + width / 2, fn_values, width, label='Falsos negativos', color='#4C78A8')
+    fig, ax = plt.subplots(figsize=(10, 6))
 
-    max_count = max(max(fp_values), max(fn_values))
-    y_top = max(1, max_count + 1)
-    ax.set_ylim(0, y_top)
+    bars1 = ax.bar(x - width, [metrics[l]['precision'] for l in labels], width, label='Precisión', color='#1f77b4')
+    bars2 = ax.bar(x, [metrics[l]['recall'] for l in labels], width, label='Recall', color='#ff7f0e')
+    bars3 = ax.bar(x + width, [metrics[l]['f1'] for l in labels], width, label='F1-Score', color='#2ca02c')
 
-    ax.set_title('Falsos positivos y falsos negativos por clase')
+    ax.set_ylim(0, 1.05)
+    ax.set_title('Métricas de rendimiento por clase', fontsize=13, fontweight='bold')
     ax.set_xlabel('Clase')
-    ax.set_ylabel('Cantidad')
+    ax.set_ylabel('Score')
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation=20, ha='right')
+    ax.set_xticklabels(labels, rotation=15, ha='right')
     ax.grid(axis='y', alpha=0.2)
     ax.legend(frameon=False)
 
-    for bar in list(bars_fp) + list(bars_fn):
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width() / 2, height + (0.03 * y_top), f'{int(height)}', ha='center')
+    for bars in [bars1, bars2, bars3]:
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width() / 2, height + 0.02, f'{height:.2f}', ha='center', fontsize=9)
 
-    if max_count == 0:
-        ax.text(
-            0.5,
-            0.9,
-            'Sin errores en pruebas: FP = 0 y FN = 0',
-            transform=ax.transAxes,
-            ha='center',
-            va='center',
-            fontsize=11,
-            bbox=dict(facecolor='white', alpha=0.85, edgecolor='#cccccc'),
-        )
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=160, bbox_inches='tight')
+    plt.close(fig)
+
+
+def generate_confidence_distribution_plot(posteriors_list, labels, output_path):
+    """Genera gráfica de distribución de confianza del modelo en sus predicciones"""
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # posteriors_list es una lista de diccionarios con probabilidades
+    max_confidences = [max(post.values()) for post in posteriors_list]
+
+    ax.hist(max_confidences, bins=15, color='#4C78A8', alpha=0.7, edgecolor='white')
+
+    mean_conf = np.mean(max_confidences)
+    ax.axvline(mean_conf, color='#E45756', linewidth=2.5, linestyle='--', label=f'Confianza promedio: {mean_conf:.3f}')
+
+    ax.set_title('Distribución de confianza del modelo (máxima probabilidad posterior)', fontsize=13, fontweight='bold')
+    ax.set_xlabel('Confianza (probabilidad máxima)')
+    ax.set_ylabel('Frecuencia')
+    ax.grid(axis='y', alpha=0.2)
+    ax.legend(frameon=False)
 
     fig.tight_layout()
     fig.savefig(output_path, dpi=160, bbox_inches='tight')
@@ -339,7 +372,8 @@ scatter_path = output_dir / 'iris_separacion.png'
 confusion_path = output_dir / 'iris_matriz_confusion.png'
 posterior_path = output_dir / 'iris_probabilidades.png'
 test_histogram_path = output_dir / 'iris_campana_promedio_pruebas.png'
-fp_fn_path = output_dir / 'iris_falsos_positivos_negativos.png'
+metrics_path = output_dir / 'iris_metricas_rendimiento.png'
+confidence_path = output_dir / 'iris_distribucion_confianza.png'
 
 generate_feature_scatter(df, target, scatter_path)
 generate_test_bell_histogram_with_mean(X_test, test_histogram_path)
@@ -361,7 +395,7 @@ print('=' * 65)
 print(f'  Clase predicha: {pred_class}')
 print(f'  Clase real    : {real_class}')
 
-preds = model.predict(X_test)
+preds, posteriors_list = model.predict_with_posteriors(X_test)
 aciertos = sum(p == r for p, r in zip(preds, y_test))
 fallos = len(y_test) - aciertos
 accuracy = aciertos / len(y_test)
@@ -378,7 +412,9 @@ print(f'  Error        : {error_rate:.4f} ({error_rate * 100:.2f}%)')
 
 generate_confusion_matrix_plot(y_test.tolist(), preds, model.classes, confusion_path)
 generate_posterior_plot(posteriors, posterior_path)
-generate_fp_fn_plot(y_test.tolist(), preds, model.classes, fp_fn_path)
+generate_performance_metrics_plot(y_test.tolist(), preds, model.classes, metrics_path)
+generate_confidence_distribution_plot(posteriors_list, model.classes, confidence_path)
 print(f'Se genero la visualizacion: {confusion_path.name}')
 print(f'Se genero la visualizacion: {posterior_path.name}')
-print(f'Se genero la visualizacion: {fp_fn_path.name}')
+print(f'Se genero la visualizacion: {metrics_path.name}')
+print(f'Se genero la visualizacion: {confidence_path.name}')
