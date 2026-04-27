@@ -3,6 +3,7 @@ import math
 import random
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import matplotlib
 
@@ -103,6 +104,17 @@ class GaussianNaiveBayes:
             pred, _ = self.predict_with_details(sample, verbose=False)
             preds.append(pred)
         return preds
+
+    def predict_with_posteriors(self, X_df):
+        """Retorna predicciones y lista de posteridades para cada muestra"""
+        preds = []
+        posteriors_list = []
+        for _, row in X_df.iterrows():
+            sample = {f: row[f] for f in X_df.columns}
+            pred, posteriors = self.predict_with_details(sample, verbose=False)
+            preds.append(pred)
+            posteriors_list.append(posteriors)
+        return preds, posteriors_list
 
 
 def stratified_split(df, target_col, train_ratio=0.8, seed=42):
@@ -223,6 +235,112 @@ def generate_posterior_plot(posteriors, output_path):
     plt.close(fig)
 
 
+def generate_performance_metrics_plot(y_true, y_pred, labels, output_path):
+    """Genera gráfica de métricas de rendimiento (Precisión, Recall, F1-Score) por clase"""
+    metrics = {label: {'precision': 0, 'recall': 0, 'f1': 0} for label in labels}
+
+    for cls in labels:
+        # Verdaderos Positivos (TP): predicción correcta
+        tp = sum(1 for real, pred in zip(y_true, y_pred) if pred == cls and real == cls)
+        # Falsos Positivos (FP): predijo la clase pero no es
+        fp = sum(1 for real, pred in zip(y_true, y_pred) if pred == cls and real != cls)
+        # Falsos Negativos (FN): no predijo pero era la clase
+        fn = sum(1 for real, pred in zip(y_true, y_pred) if real == cls and pred != cls)
+
+        # Calcular métricas
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+        metrics[cls]['precision'] = precision
+        metrics[cls]['recall'] = recall
+        metrics[cls]['f1'] = f1
+
+    x = np.arange(len(labels))
+    width = 0.25
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    bars1 = ax.bar(x - width, [metrics[l]['precision'] for l in labels], width, label='Precisión', color='#1f77b4')
+    bars2 = ax.bar(x, [metrics[l]['recall'] for l in labels], width, label='Recall', color='#ff7f0e')
+    bars3 = ax.bar(x + width, [metrics[l]['f1'] for l in labels], width, label='F1-Score', color='#2ca02c')
+
+    ax.set_ylim(0, 1.05)
+    ax.set_title('Métricas de rendimiento por clase', fontsize=13, fontweight='bold')
+    ax.set_xlabel('Clase')
+    ax.set_ylabel('Score')
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=15, ha='right')
+    ax.grid(axis='y', alpha=0.2)
+    ax.legend(frameon=False)
+
+    for bars in [bars1, bars2, bars3]:
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width() / 2, height + 0.02, f'{height:.2f}', ha='center', fontsize=9)
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=160, bbox_inches='tight')
+    plt.close(fig)
+
+
+def generate_confidence_distribution_plot(posteriors_list, labels, output_path):
+    """Genera gráfica de distribución de confianza del modelo en sus predicciones"""
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # posteriors_list es una lista de diccionarios con probabilidades
+    max_confidences = [max(post.values()) for post in posteriors_list]
+
+    ax.hist(max_confidences, bins=15, color='#4C78A8', alpha=0.7, edgecolor='white')
+
+    mean_conf = np.mean(max_confidences)
+    ax.axvline(mean_conf, color='#E45756', linewidth=2.5, linestyle='--', label=f'Confianza promedio: {mean_conf:.3f}')
+
+    ax.set_title('Distribución de confianza del modelo (máxima probabilidad posterior)', fontsize=13, fontweight='bold')
+    ax.set_xlabel('Confianza (probabilidad máxima)')
+    ax.set_ylabel('Frecuencia')
+    ax.grid(axis='y', alpha=0.2)
+    ax.legend(frameon=False)
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=160, bbox_inches='tight')
+    plt.close(fig)
+
+
+def generate_test_bell_histogram_with_mean(X_test_df, output_path):
+    values = X_test_df.to_numpy(dtype=float).ravel()
+
+    mean = values.mean()
+    std = values.std(ddof=1)
+
+    fig, ax = plt.subplots(figsize=(9, 6))
+    ax.hist(
+        values,
+        bins=15,
+        density=True,
+        color='#4C78A8',
+        alpha=0.60,
+        edgecolor='white',
+        label='Histograma (general pruebas)',
+    )
+
+    x = np.linspace(values.min() - 0.5, values.max() + 0.5, 400)
+    y = (1 / (std * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x - mean) / std) ** 2)
+    ax.plot(x, y, color='#F58518', linewidth=2.2, label='Curva de campana (normal)')
+
+    ax.axvline(mean, color='#E45756', linewidth=2.4, linestyle='--', label=f'Promedio: {mean:.3f}')
+
+    ax.set_title('Histograma de campana general (conjunto de pruebas)')
+    ax.set_xlabel('Valor de caracteristicas (test)')
+    ax.set_ylabel('Densidad')
+    ax.grid(alpha=0.2)
+    ax.legend(frameon=False)
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=160, bbox_inches='tight')
+    plt.close(fig)
+
+
 df = load_iris_dataframe()
 features = ['sepal_length', 'sepal_width', 'petal_length', 'petal_width']
 target = 'species'
@@ -253,9 +371,14 @@ output_dir = Path(__file__).resolve().parent
 scatter_path = output_dir / 'iris_separacion.png'
 confusion_path = output_dir / 'iris_matriz_confusion.png'
 posterior_path = output_dir / 'iris_probabilidades.png'
+test_histogram_path = output_dir / 'iris_campana_promedio_pruebas.png'
+metrics_path = output_dir / 'iris_metricas_rendimiento.png'
+confidence_path = output_dir / 'iris_distribucion_confianza.png'
 
 generate_feature_scatter(df, target, scatter_path)
+generate_test_bell_histogram_with_mean(X_test, test_histogram_path)
 print(f'\nSe genero la visualizacion: {scatter_path.name}')
+print(f'Se genero la visualizacion: {test_histogram_path.name}')
 
 model = GaussianNaiveBayes()
 model.fit(X_train, y_train)
@@ -272,7 +395,7 @@ print('=' * 65)
 print(f'  Clase predicha: {pred_class}')
 print(f'  Clase real    : {real_class}')
 
-preds = model.predict(X_test)
+preds, posteriors_list = model.predict_with_posteriors(X_test)
 aciertos = sum(p == r for p, r in zip(preds, y_test))
 fallos = len(y_test) - aciertos
 accuracy = aciertos / len(y_test)
@@ -289,5 +412,9 @@ print(f'  Error        : {error_rate:.4f} ({error_rate * 100:.2f}%)')
 
 generate_confusion_matrix_plot(y_test.tolist(), preds, model.classes, confusion_path)
 generate_posterior_plot(posteriors, posterior_path)
+generate_performance_metrics_plot(y_test.tolist(), preds, model.classes, metrics_path)
+generate_confidence_distribution_plot(posteriors_list, model.classes, confidence_path)
 print(f'Se genero la visualizacion: {confusion_path.name}')
 print(f'Se genero la visualizacion: {posterior_path.name}')
+print(f'Se genero la visualizacion: {metrics_path.name}')
+print(f'Se genero la visualizacion: {confidence_path.name}')
