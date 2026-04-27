@@ -146,6 +146,19 @@ print(f"Matriz de confusión guardada en: {cm_path}")
 print(f"Umbral usado para la decisión binaria: {threshold:.2f}")
 print(f"Verdaderos negativos: {tn}, Falsos positivos: {fp}, Falsos negativos: {fn}, Verdaderos positivos: {tp}")
 
+# Diagnóstico adicional: residuos contra predicción para detectar sesgo y heterocedasticidad
+fig_res, ax_res = plt.subplots(figsize=(8, 6))
+ax_res.scatter(ypred, residuals, alpha=0.75, color="#4C78A8", edgecolor="black", linewidth=0.3)
+ax_res.axhline(0, color="red", linestyle="--", linewidth=2)
+ax_res.set_title("Residuos vs Predicción")
+ax_res.set_xlabel("Valor predicho")
+ax_res.set_ylabel("Residuo (real - predicho)")
+
+res_path = Path(__file__).resolve().parent / "regresion_residuos_vs_prediccion.png"
+plt.tight_layout()
+plt.savefig(res_path, dpi=300, bbox_inches="tight")
+print(f"Gráfica de residuos vs predicción guardada en: {res_path}")
+
 #como conclusión, podemos ver que el CGPA es el factor dominante por el hecho que refleja el desempeño
 #académico sostenido, ya que este mantiene la correlación más fuerte con la probabilidad de aceptación,
 #seguido de la experiencia en investigación y las cartas de recomendación, que actuan como diferenciadores
