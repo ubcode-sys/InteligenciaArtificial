@@ -1,142 +1,132 @@
-import os
 import pandas as pd
 import numpy as np
-
-# AHORA SÍ, IMPORTAMOS ESTAS LIBRERÍAS (¡PACIENCIA AL INICIAR!)
-import seaborn as sns
 import matplotlib.pyplot as plt
-
+import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import mean_squared_error, mean_absolute_error, accuracy_score
-
-# ==========================================
-# 1. CARGAR EL DATASET (Método Robust OS)
-# ==========================================
-# Obtenemos la ruta exacta de la carpeta donde está este script de Python
-directorio_actual = os.path.dirname(os.path.abspath(__file__))
-
-# Unimos esa ruta con el nombre exacto de tu archivo descargado de Kaggle
-nombre_archivo = 'Titanic-Dataset.csv' # Asegúrate de que este es el nombre real
-ruta_csv = os.path.join(directorio_actual, nombre_archivo)
-
-print(f"Intentando cargar archivo desde: {ruta_csv}")
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error, mean_absolute_error, accuracy_score, confusion_matrix, classification_report
 
 try:
-    df = pd.read_csv(ruta_csv)
-    print("¡Archivo cargado exitosamente!")
+    df = pd.read_csv('Titanic-Dataset.csv') 
 except FileNotFoundError:
-    print(f"ERROR Fatal: No se encontró el archivo '{nombre_archivo}' en la carpeta '{directorio_actual}'.")
-    exit() # Detenemos la ejecución si no hay datos
+    print("Error: No se encontró el archivo 'Titanic-Dataset.csv'. Asegúrate de que esté en la carpeta correcta.")
+    exit()
 
-# ==========================================
-# 2. PREPROCESAMIENTO DE DATOS
-# ==========================================
-# Llenamos valores nulos básicos
-df['Age'] = df['Age'].fillna(df['Age'].median())
-df['Embarked'] = df['Embarked'].fillna(df['Embarked'].mode()[0])
-
-# Eliminamos columnas no predictivas directamente
-df.drop(['PassengerId', 'Name', 'Ticket', 'Cabin'], axis=1, inplace=True)
-
-# Convertimos variables categóricas a numéricas (One-Hot Encoding)
-# 'Sex' se vuelve 'Sex_male' (0=mujer, 1=hombre)
-df = pd.get_dummies(df, columns=['Sex', 'Embarked'], drop_first=True)
-
-# ==========================================
-# 3. SEPARACIÓN DE DATOS (80/20)
-# ==========================================
-X = df.drop('Survived', axis=1)
-y = df['Survived']
-
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
-
-# ==========================================
-# 4. ENTRENAMIENTO DEL MODELO
-# ==========================================
-# Usamos un solucionador compatible con penalización l2 por defecto
-modelo = LogisticRegression(max_iter=1000)
-modelo.fit(X_train, y_train)
-
-# ==========================================
-# 5. COEFICIENTES (BETA) DEL MODELO
-# ==========================================
-print("\n" + "="*50)
-print("COEFICIENTES DEL MODELO (BETAS) - Requisito Tarea")
-print("="*50)
-print(f"Intercepto (Beta 0): {modelo.intercept_[0]:.4f}\n")
-for feature, coef in zip(X.columns, modelo.coef_[0]):
-    print(f"Variable: {feature: <15} | Coeficiente (Beta): {coef:.4f}")
-
-# ==========================================
-# 6. PREDICCIONES Y OBTENCIÓN DE PROBABILIDADES
-# ==========================================
-y_pred_classes = modelo.predict(X_test)
-
-# predict_proba nos da la probabilidad de cada clase (0 y 1)
-# Nos interesa la columna [1], que es la probabilidad de sobrevivir (clase 1)
-y_pred_probs = modelo.predict_proba(X_test)[:, 1]
-
-# ==========================================
-# 7. EVALUACIÓN Y ERRORES
-# ==========================================
-aciertos = (y_pred_classes == y_test).sum()
-fallos = (y_pred_classes != y_test).sum()
-
-mse = mean_squared_error(y_test, y_pred_classes)
-mae = mean_absolute_error(y_test, y_pred_classes)
-
-print("\n" + "="*50)
-print("MÉTRICAS DE RENDIMIENTO SOBRE PRUEBAS (20%) - Requisito Tarea")
-print("="*50)
-print(f"Total de casos de prueba : {len(y_test)}")
-print(f"Veces que ACIERTA        : {aciertos}")
-print(f"Veces que FALLA          : {fallos}")
-print(f"Precisión global (Accuracy): {(aciertos/len(y_test))*100:.2f}%")
-print(f"\nNivel de Error:")
-print(f"Error Cuadrático Medio (MSE) : {mse:.4f}")
-print(f"Error Absoluto Medio (MAE)   : {mae:.4f}")
-
-# ==========================================
-# 8. GENERACIÓN DE GRÁFICAS VISUALES (NUEVO)
-# ==========================================
-print("\n" + "="*50)
-print("GENERANDO GRÁFICAS VISUALES...")
-print("="*50)
-
-# Configuración estética de Seaborn
 sns.set_theme(style="whitegrid")
 
-# Creamos una figura con dos subgráficas (una al lado de la otra)
-fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+print("--- 1. ANÁLISIS EXPLORATORIO Y LIMPIEZA ---")
 
-# --- GRÁFICA 1: Distribución General de Probabilidades ---
-# Muestra cuántas personas cayeron en cada rango de probabilidad calculada por el modelo.
-sns.histplot(y_pred_probs, bins=20, kde=True, ax=axes[0], color='skyblue', edgecolor='black')
-axes[0].set_title('Distribución Global de Probabilidades de Supervivencia Predichas', fontsize=14)
-axes[0].set_xlabel('Probabilidad Calculada (0.0 a 1.0)', fontsize=12)
-axes[0].set_ylabel('Frecuencia (Número de Pasajeros)', fontsize=12)
-# Añadimos una línea roja en el umbral por defecto (0.5)
-axes[0].axvline(0.5, color='red', linestyle='--', label='Umbral de Decisión (0.5)')
-axes[0].legend()
+fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+fig.suptitle('Análisis de Variables Categóricas', fontsize=16, fontweight='bold', color='#2c3e50')
 
-# --- GRÁFICA 2: Distribución de Probabilidades vs. Desenlace Real ---
-# Esta es la gráfica más potente: separa a los que realmente murieron de los que sobrevivieron
-# y muestra qué probabilidad les asignó el modelo. Un buen modelo tendrá
-# las curvas separadas en los extremos.
-data_plot = pd.DataFrame({'Probabilidad': y_pred_probs, 'Realidad': y_test.values})
-# Mapeamos numérico a texto para la leyenda
-data_plot['Realidad'] = data_plot['Realidad'].map({0: 'Falleció (Real)', 1: 'Sobrevivió (Real)'})
+# Género
+sns.countplot(data=df, x='Sex', ax=axes[0], palette='magma', hue='Sex', legend=False)
+axes[0].set_title('Distribución por Género')
+axes[0].set_xlabel('Sexo')
+axes[0].set_ylabel('Cantidad')
+axes[0].set_xticklabels(['Hombre', 'Mujer'] if df['Sex'].iloc[0] == 'male' else ['Mujer', 'Hombre'])
 
-sns.histplot(data=data_plot, x='Probabilidad', hue='Realidad', element="step",
-             stat="density", common_norm=False, kde=True, bins=20, ax=axes[1],
-             palette={'Falleció (Real)': 'red', 'Sobrevivió (Real)': 'green'})
+# Puerto
+sns.countplot(data=df, x='Embarked', ax=axes[1], palette='viridis', hue='Embarked', legend=False)
+axes[1].set_title('Puerto de Origen')
+axes[1].set_xlabel('Puerto')
+axes[1].set_ylabel('Cantidad')
 
-axes[1].set_title('Separación de Probabilidades por Desenlace Real', fontsize=14)
-axes[1].set_xlabel('Probabilidad Calculada (0.0 a 1.0)', fontsize=12)
-axes[1].set_ylabel('Densidad', fontsize=12)
-axes[1].axvline(0.5, color='black', linestyle='--', alpha=0.5)
+# Supervivencia
+sns.countplot(data=df, x='Survived', ax=axes[2], palette='icefire', hue='Survived', legend=False)
+axes[2].set_title('Estado de Supervivencia')
+axes[2].set_xticks([0, 1])
+axes[2].set_xticklabels(['Fallecido', 'Sobreviviente'])
+axes[2].set_xlabel('¿Sobrevivió?')
+axes[2].set_ylabel('Cantidad')
 
-plt.tight_layout() # Ajusta automáticamente los márgenes
-print("Mostrando gráficas. Cierra la ventana de gráficos para finalizar el programa.")
-plt.show() # Esta línea detiene la ejecución hasta que cierres la ventana
+plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+plt.show()
+
+# 2. Histogramas de Variables Numéricas
+cols_num = ['Pclass', 'Age', 'SibSp', 'Parch', 'Fare']
+fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+fig.suptitle('Distribución de Variables Numéricas', fontsize=16, fontweight='bold')
+axes = axes.flatten()
+
+for i, col in enumerate(cols_num):
+    if col in df.columns:
+        sns.histplot(df[col].dropna(), kde=True, ax=axes[i], color='#34495e')
+        media_val = df[col].mean()
+        mediana_val = df[col].median()
+        axes[i].axvline(media_val, color='red', label=f'Media: {media_val:.1f}')
+        axes[i].axvline(mediana_val, color='orange', linestyle='--', label=f'Mediana: {mediana_val:.1f}')
+        axes[i].set_title(f'Distribución de: {col}')
+        axes[i].set_ylabel('Frecuencia')
+        axes[i].set_xlabel('Valor')
+        axes[i].legend()
+
+fig.delaxes(axes[5])
+plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+plt.show()
+
+columnas_a_quitar = [c for c in ['PassengerId', 'Name', 'Ticket', 'Cabin'] if c in df.columns]
+df_clean = df.drop(columnas_a_quitar, axis=1)
+
+df_clean['Age'] = df_clean['Age'].fillna(df_clean['Age'].median())
+if 'Embarked' in df_clean.columns:
+    df_clean['Embarked'] = df_clean['Embarked'].fillna(df_clean['Embarked'].mode()[0])
+
+
+df_clean['Sex'] = df_clean['Sex'].map({'male': 0, 'female': 1})
+df_clean = pd.get_dummies(df_clean, columns=['Embarked'], drop_first=True)
+
+X = df_clean.drop('Survived', axis=1)
+y = df_clean['Survived']
+nombres_columnas = X.columns
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+print(f"Total de registros: {len(df_clean)}")
+print(f"Set Entrenamiento: {len(X_train)} | Set Prueba: {len(X_test)}\n")
+
+print("--- 2. ENTRENAMIENTO Y PESOS DEL MODELO (BETAS) ---")
+modelo_logistico = LogisticRegression()
+modelo_logistico.fit(X_train_scaled, y_train)
+
+print(f"Punto de Corte (Beta 0): {modelo_logistico.intercept_[0]:.4f}")
+for col, coef in zip(nombres_columnas, modelo_logistico.coef_[0]):
+    print(f"Coeficiente β para {col}: {coef:.4f}")
+
+importancias = pd.DataFrame({'Variable': nombres_columnas, 'Peso': modelo_logistico.coef_[0]})
+importancias = importancias.sort_values(by='Peso')
+
+plt.figure(figsize=(10, 6))
+colors = ['#e74c3c' if x < 0 else '#2ecc71' for x in importancias['Peso']]
+sns.barplot(data=importancias, x='Peso', y='Variable', palette=colors)
+plt.title('Influencia de las Variables en la Supervivencia', fontsize=14)
+plt.xlabel('Impacto (Negativo = Menos probabilidad | Positivo = Más probabilidad)')
+plt.show()
+
+print("--- 3. PREDICCIONES INDIVIDUALES (MUESTRA) ---")
+y_pred_class = modelo_logistico.predict(X_test_scaled)
+y_pred_proba = modelo_logistico.predict_proba(X_test_scaled)[:, 1]
+y_test_array = y_test.values
+
+for i in range(10):
+    error_i = (y_test_array[i] - y_pred_proba[i]) ** 2
+    resultado = "✓ Acierto" if y_pred_class[i] == y_test_array[i] else "✗ Falla"
+    print(f"Pax {i+1} | Prob: {y_pred_proba[i]*100:5.2f}% | Pred: {y_pred_class[i]} | Real: {y_test_array[i]} | {resultado}")
+
+
+accuracy = accuracy_score(y_test, y_pred_class)
+print(f"\nPrecisión Final: {accuracy * 100:.2f}%")
+
+cm = confusion_matrix(y_test, y_pred_class)
+plt.figure(figsize=(8, 6))
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+            xticklabels=['Murió', 'Vivió'], yticklabels=['Murió', 'Vivió'])
+plt.title('Matriz de Confusión Final')
+plt.xlabel('Predicción')
+plt.ylabel('Real')
+plt.show()
